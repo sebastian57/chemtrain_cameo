@@ -1,0 +1,5 @@
+cmake .. \
+  -DCMAKE_PREFIX_PATH=$XLA_DIR \
+  -DLAMMPS_SOURCE_DIR=p/project1/cameo/schmidt36/lammps/src \
+  -DCMAKE_INSTALL_PREFIX=$CHEMTRAIN_DEPLOY_DIR/install
+

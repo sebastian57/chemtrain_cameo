@@ -1,0 +1,32 @@
+# Python caches and packaging artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Editor swap files
+*.swp
+*~
+
+# Generic logs and crash dumps
+*.log
+/core.*
+/slurm-*.out
+/slurm_*.out
+
+# Local training outputs
+/checkpoints_allegro/
+/exported_models/
+/losses/
+/neighbor_checks/
+/plots/
+/timing_analysis/
+
+# chemtrain-deploy build/runtime artifacts
+/chemtrain-deploy/build/
+/chemtrain-deploy/lib/
+/chemtrain-deploy/out/
+/chemtrain-deploy/bazel-*
+/chemtrain-deploy/.jax.bazelrc.swp
+/chemtrain-deploy/MODULE.bazel.lock
+/chemtrain-deploy/gpu_pjrt_build.log
+/chemtrain-deploy/core.*
