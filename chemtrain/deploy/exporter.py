@@ -202,8 +202,29 @@ class Exporter(metaclass=abc.ABCMeta):
 
         return force_and_aux(position)
 
-    def export(self) -> None:
-        """Exports the potential model to an MLIR module."""
+    def _build_symbolic_export_inputs(self):
+        """Build the default symbolic input signature for export."""
+        self._add_shapes(self._define_position_shapes)
+        self._add_shapes(self.graph_type.create_symbolic_input_format)
+        return self._create_shapes()
+
+    def export(
+        self,
+        export_inputs=None,
+        *,
+        disabled_checks=None,
+        platforms=None,
+    ) -> None:
+        """Exports the potential model to an MLIR module.
+
+        Args:
+            export_inputs: Optional explicit example inputs passed to
+                ``jax.export.export``. If omitted, the exporter uses the
+                symbolic input signature defined by ``graph_type``.
+            disabled_checks: Optional list of JAX export safety checks to
+                disable for custom-call based models.
+            platforms: Optional export platform list. Defaults to ``["cuda"]``.
+        """
 
         proto = model_proto.Model()
 
@@ -218,17 +239,18 @@ class Exporter(metaclass=abc.ABCMeta):
 
         self.graph_type.set_properties(proto)
 
-        # Using the ghost mask in the last layer we can compute correct forces
-        # by accounting for their contribution to the gradient but
-        # mask them out when we compute the total potential to not count
-        # them double.
-        self._add_shapes(self._define_position_shapes)
-        self._add_shapes(self.graph_type.create_symbolic_input_format)
+        if export_inputs is None:
+            export_inputs = self._build_symbolic_export_inputs()
 
-        shapes = self._create_shapes()
+        export_kwargs = {
+            "platforms": ["cuda"] if platforms is None else list(platforms),
+        }
+        if disabled_checks is not None:
+            export_kwargs["disabled_checks"] = disabled_checks
 
         exp: export.Exported = export.export(
-            jax.jit(self._energy_fn), platforms=["cuda"])(*shapes)
+            jax.jit(self._energy_fn), **export_kwargs
+        )(*export_inputs)
 
         proto.mlir_module = exp.mlir_module()
 

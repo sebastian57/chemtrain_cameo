@@ -23,6 +23,7 @@ import jax
 from jax import (lax, vmap, pmap, value_and_grad, tree_map, device_count,
                  numpy as jnp, device_put, jit)
 from jax.sharding import Mesh, PartitionSpec, NamedSharding, SingleDeviceSharding
+from jax.experimental import multihost_utils
 from jax.experimental.shard_map import shard_map
 from jax_sgmc import data
 import optax
@@ -80,6 +81,17 @@ def _shape_vec(x, max_rank=6):
     else:
         shape = shape[:max_rank]
     return jnp.asarray(shape, dtype=jnp.int32)
+
+
+def _put_process_local_data(data, mesh, pspec):
+    """Convert per-process local data into a global sharded array when needed."""
+    if mesh.size <= 1:
+        return data
+
+    sharding = NamedSharding(mesh, pspec)
+    if jax.process_count() > 1:
+        return multihost_utils.host_local_array_to_global_array(data, mesh, pspec)
+    return device_put(data, sharding)
 
 
 def _get_param_loss_fn(loss_fn, batched_model, penalty_fn=None):
@@ -781,10 +793,11 @@ def shmap_update_fn(batched_model, loss_fn, optimizer, penalty_fn=None):
             if profile_this_step:
                 t_put_batch_start = time.perf_counter()
             with jax.profiler.TraceAnnotation("chemtrain.update_fn.device_put_batch"):
-                batch_sharding = NamedSharding(
-                    mesh, _batch_in_spec(resolved_accum_mode, microbatch_count)
+                batch = _put_process_local_data(
+                    batch,
+                    mesh,
+                    _batch_in_spec(resolved_accum_mode, microbatch_count),
                 )
-                batch = device_put(batch, batch_sharding)
             if profile_this_step:
                 t_put_batch_end = time.perf_counter()
                 put_batch_ms = (t_put_batch_end - t_put_batch_start) * 1e3
@@ -1048,7 +1061,7 @@ def shmap_loss_fn(batched_model, loss_fn, penalty_fn=None):
         data = batch, mask
         if mesh.size > 1:
             params = device_put(params, replicate)
-            data = device_put(data, split)
+            data = _put_process_local_data(data, mesh, PartitionSpec('batch'))
 
         *outs, per_target_loss = batch_update(params, data)
 
@@ -1098,7 +1111,7 @@ def shmap_model(batched_model):
     def shmapped_model(params, batch):
         if mesh.size > 1:
             params = device_put(params, replicate)
-            batch = device_put(batch, split)
+            batch = _put_process_local_data(batch, mesh, PartitionSpec('batch'))
 
         return batch_update(params, batch)
 
