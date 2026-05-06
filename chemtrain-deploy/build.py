@@ -136,28 +136,32 @@ def check_python_version(python_version):
 
 def apply_build_profile_defaults(args):
   """Applies profile defaults after parsing while keeping explicit flags valid."""
-  if args.build_profile != "juwels-booster":
+  if args.build_profile not in ("juwels-booster", "jupiter-booster"):
     return
 
-  # On JUWELS Booster the hermetic Clang/toolchain path triggers duplicate
-  # crosstool module maps for the connector build. Prefer the non-Clang host
-  # toolchain path by default unless the caller explicitly requests otherwise.
+  # On the JSC booster systems the hermetic Clang/toolchain path can trigger
+  # duplicate crosstool module maps for the connector build. Prefer the
+  # non-Clang host toolchain path by default unless the caller explicitly
+  # requests otherwise.
   args.use_clang = False
 
   if args.enable_cuda:
     if args.cuda_version is None:
-      # Keep the JUWELS profile aligned with the JAX 0.9.x CUDA baseline rather
+      # Keep these profiles aligned with the JAX 0.9.x CUDA baseline rather
       # than forcing the older cluster module version into the hermetic build.
       args.cuda_version = "12.9.1"
     if args.cudnn_version is None:
-      # JUWELS runtime modules currently provide cuDNN 9.5.0, so keep the
+      # Runtime modules currently provide cuDNN 9.5.0, so keep the
       # source PJRT build ABI-compatible with the libraries that LAMMPS will
       # actually load at runtime.
       args.cudnn_version = "9.5.0"
     if args.cuda_compute_capabilities is None:
-      # JUWELS Booster nodes use A100 GPUs, so targeting sm_80 avoids pulling in
-      # upstream placeholder architectures that older NVCC releases cannot compile.
-      args.cuda_compute_capabilities = "sm_80"
+      if args.build_profile == "jupiter-booster":
+        # Jupiter Booster uses GH200/Hopper GPUs.
+        args.cuda_compute_capabilities = "sm_90"
+      else:
+        # JUWELS Booster nodes use A100 GPUs.
+        args.cuda_compute_capabilities = "sm_80"
 
 
 def get_githash():
@@ -437,12 +441,12 @@ def main():
       "GitHub.")
   parser.add_argument(
       "--build_profile",
-      choices=["generic", "juwels-booster"],
+      choices=["generic", "juwels-booster", "jupiter-booster"],
       default="generic",
       help=(
           "Build profile defaults. 'generic' preserves upstream-oriented "
-          "behavior. 'juwels-booster' applies the stable JUWELS CUDA/NVCC "
-          "defaults for source PJRT builds."
+          "behavior. 'juwels-booster' applies A100 CUDA/NVCC defaults. "
+          "'jupiter-booster' applies GH200/Hopper CUDA/NVCC defaults."
       ),
   )
   add_boolean_argument(
@@ -729,7 +733,8 @@ def main():
       if not args.cuda_version:
           raise ValueError(
               "--cuda_version is required when building the GPU PJRT plugin. "
-              "Use --build_profile juwels-booster for the supported JUWELS defaults."
+              "Use --build_profile juwels-booster or jupiter-booster for "
+              "supported JSC booster defaults."
           )
 
       build_pjrt_plugin_command = [

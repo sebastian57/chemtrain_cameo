@@ -7,4 +7,4 @@ import %workspace%/jax.bazelrc
 --action_env=TF_NVCC_CLANG=0
 --repo_env=HERMETIC_CUDA_VERSION=12.9.1
 --repo_env=HERMETIC_CUDNN_VERSION=9.5.0
---repo_env=HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_80
+--repo_env=HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_90
