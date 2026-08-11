@@ -1,10 +1,9 @@
 
 # Load the JAX bazelrc
 import %workspace%/jax.bazelrc
+--action_env=CLANG_COMPILER_PATH=/e/software/fs/jupiter/stages/2025/software/Clang/18.1.8-GCCcore-13.3.0/bin/clang-18
+--repo_env=CC=/e/software/fs/jupiter/stages/2025/software/Clang/18.1.8-GCCcore-13.3.0/bin/clang-18
+--repo_env=BAZEL_COMPILER=/e/software/fs/jupiter/stages/2025/software/Clang/18.1.8-GCCcore-13.3.0/bin/clang-18
+--config=clang
+--define=xnn_enable_avxvnniint8=false
 --config=native_arch_posix
---config=cuda
---config=build_cuda_with_nvcc
---action_env=TF_NVCC_CLANG=0
---repo_env=HERMETIC_CUDA_VERSION=12.9.1
---repo_env=HERMETIC_CUDNN_VERSION=9.5.0
---repo_env=HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_90

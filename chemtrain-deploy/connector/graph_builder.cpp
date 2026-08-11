@@ -23,12 +23,19 @@ limitations under the License.
 #include <bitset>
 #include <iostream>
 #include <algorithm>
-
+#include <unordered_set>
 #include "connector/graph_builder.h"
 #include "connector/buffer.h"
 #include "connector/utils.h"
 
 namespace jcn {
+
+    constexpr int kLammpsNeighborMask = 0x1FFFFFFF;
+
+    static inline std::uint64_t pack_edge(int i, int j) {
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(i)) << 32)
+             | static_cast<std::uint32_t>(j);
+    }
 
     /** Simple sparse neighbor list ******************************************/
 
@@ -145,24 +152,37 @@ namespace jcn {
 
             // Fill in the sender and receiver values
             int edge_counter = 0;
+            std::unordered_set<std::uint64_t> seen_edges;
             for (int i = 0; i < inum; i++) {
                 int num_neighbors = numneigh[i];
                 int* firstneigh_ptr = firstneigh[i];
 
-                if (edge_counter + num_neighbors > max_senders) {
-                    throw std::runtime_error("Exceeded maximum number of senders");
+                for (int n = 0; n < num_neighbors; ++n) {
+                    int sender = ilist[i];
+                    int receiver = firstneigh_ptr[n] & kLammpsNeighborMask;
+
+                    if (sender == receiver) {
+                        continue;
+                    }
+
+                    // Normalize to one canonical edge per undirected pair so
+                    // the live sparse connector matches the half-list
+                    // semantics of the exported model.
+                    int canon_sender = std::min(sender, receiver);
+                    int canon_receiver = std::max(sender, receiver);
+                    std::uint64_t edge_key = pack_edge(canon_sender, canon_receiver);
+                    if (!seen_edges.insert(edge_key).second) {
+                        continue;
+                    }
+
+                    if (edge_counter >= max_senders || edge_counter >= max_receivers) {
+                        throw std::runtime_error("Exceeded maximum number of canonical sparse edges");
+                    }
+
+                    senders_data[edge_counter] = canon_sender;
+                    receivers_data[edge_counter] = canon_receiver;
+                    edge_counter += 1;
                 }
-                if (edge_counter + num_neighbors > max_receivers) {
-                    throw std::runtime_error("Exceeded maximum number of receivers");
-                }
-
-                // Copy ilist[i] to senders_data
-                std::fill(senders_data + edge_counter, senders_data + edge_counter + num_neighbors, ilist[i]);
-
-                // Copy firstneigh[i] to receivers_data
-                std::memcpy(receivers_data + edge_counter, firstneigh_ptr, num_neighbors * sizeof(int));
-
-                edge_counter += num_neighbors;
             }
 
             // Fill in the invalid values

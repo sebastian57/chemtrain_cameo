@@ -205,6 +205,15 @@ def quantity_multimap(*states: State,
             kwargs["neighbor"] = custom_partition.mask_neighbor_list(
                 new_nbrs, mask, segment_id=kwargs.get("segment_id")
             )
+        elif "neighbor_idx" in kwargs:
+            # Dataset-supplied static graph. Connectivity was constructed once
+            # from these coordinates, so it is used verbatim: no update, and no
+            # re-masking, since invalid, self and cross-segment edges were
+            # already excluded at construction time. Consumed here rather than
+            # passed on, so downstream quantity functions see only `neighbor`.
+            kwargs["neighbor"] = custom_partition.static_neighbor_list(
+                kwargs.pop("neighbor_idx"), states[0].position
+            )
 
         # Extract additional features to all snapshot computation functions,
         # e.g., the neighbor list graph. Next features can be beased on

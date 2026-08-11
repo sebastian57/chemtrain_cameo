@@ -24,9 +24,9 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    'jax <= 0.4.37',
-    'jaxlib <= 0.4.37',
-    'scipy < 1.13', # Removed scipy.linal.tril, etc.
+    'jax',
+    'jaxlib',
+    'scipy',
     'jax-md',
     'jax-sgmc',
     'optax',
@@ -39,7 +39,7 @@ dependencies = [
     'jaxopt',
     'dm-tree',
     'networkx',
-    'protobuf<=3.20'
+    'protobuf<=3.20.3'
 ]
 dynamic = ["version"]
 

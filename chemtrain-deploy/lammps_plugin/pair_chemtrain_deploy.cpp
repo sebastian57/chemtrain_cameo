@@ -303,8 +303,11 @@ void ChemtrainDeploy::init_style()
     request |= NeighConst::REQ_GHOST;
   }
 
-  if (!model_properties.neighbor_list.half_list || force->newton) {
-    // It seems like setting newton to true requires a full list
+  if (!model_properties.neighbor_list.half_list) {
+    // Only request a full list when the model explicitly requires both directions.
+    // For half_list models the exported create_from_args newton=True branch (case 1)
+    // pads a half-list correctly; requesting REQ_FULL would deliver a 2N directed
+    // graph that the model then treats as N valid pairs, doubling energy and forces.
     request |= NeighConst::REQ_FULL;
   }
 

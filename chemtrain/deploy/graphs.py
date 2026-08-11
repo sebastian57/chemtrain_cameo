@@ -130,28 +130,33 @@ class SimpleSparseNeighborList(NeighborList):
                          newton,
                          *args) -> Tuple["SimpleSparseNeighborList",
                                          "NeighborListStatistics"]:
-        # Make edges undirected by adding their counterpart
         invalid_idx = species.size
 
-        # If newton is true, the transferred neighbor list is a full list.
-        # Therefore, we need to set half of the edges to invalid to avoid
-        # double counting.
         senders, receivers, m = args
         max_edges = m.size
 
-        # Remove all edges that are longer than the cutoff distance
-        dists = jnp.linalg.norm(position[senders] - position[receivers], axis=-1)
-        invalid = dists > r_cutoff
+        # Remove all edges that are longer than the cutoff distance.  Padding
+        # edges use the fill index, which is one past the valid atom range; keep
+        # those indices away from JAX gathers before applying the invalid mask.
+        in_range = (senders < invalid_idx) & (receivers < invalid_idx)
+        senders_safe = jnp.where(in_range, senders, 0)
+        receivers_safe = jnp.where(in_range, receivers, 0)
+        dists = jnp.linalg.norm(position[senders_safe] - position[receivers_safe], axis=-1)
+        invalid = (~in_range) | (dists > r_cutoff)
 
         vs = jnp.where(invalid, invalid_idx, senders)
         vr = jnp.where(invalid, invalid_idx, receivers)
 
-        # Prune all irrelevant edges. In the newton setting, the provided
-        # neighbor list is a full list.
+        # The connector requests/transfers a LAMMPS half-list for this graph
+        # type as an input optimization.  The exported model, however, consumes
+        # the same JAX-MD sparse contract used during training: a full directed
+        # sparse graph with idx=(receivers, senders).  prune_neighbor_list with
+        # half_list=True expands each input pair to both directions before
+        # pruning to the atoms relevant for this domain.
         graph = SimpleSparseNeighborList(vs, vr, m)
         graph, max_neighbors = lax.cond(
             newton,
-            functools.partial(prune_neighbor_list, max_edges=max_edges, nbr_order=nbr_order[0], half_list=False),
+            functools.partial(prune_neighbor_list, max_edges=max_edges, nbr_order=nbr_order[0], half_list=True),
             functools.partial(prune_neighbor_list, max_edges=max_edges, nbr_order=nbr_order[1], half_list=True),
             graph, ghost_mask
         )
@@ -161,7 +166,7 @@ class SimpleSparseNeighborList(NeighborList):
         return graph, statistics.tuple
 
     def to_neighborlist(self):
-        idx = jnp.stack([self.senders, self.receivers], axis=0)
+        idx = jnp.stack([self.receivers, self.senders], axis=0)
         nbrs = partition.NeighborList(
             idx, None, None, None, None, partition.Sparse, None, None, None)
         return nbrs
@@ -644,7 +649,10 @@ def prune_neighbor_list(list, local, max_edges, nbr_order: int, half_list: bool 
     # to compute forces without communication between domains.
     reachable, _ = lax.scan(_update, local, jnp.arange(nbr_order))
 
-    mask = reachable[list.senders] & reachable[list.receivers]
+    in_range = (list.senders < local.size) & (list.receivers < local.size)
+    senders_safe = jnp.where(in_range, list.senders, 0)
+    receivers_safe = jnp.where(in_range, list.receivers, 0)
+    mask = in_range & reachable[senders_safe] & reachable[receivers_safe]
     senders = jnp.where(mask, list.senders, local.size)
     receivers = jnp.where(mask, list.receivers, local.size)
     n_valid = jnp.sum(mask)
@@ -705,5 +713,3 @@ if __name__ == "__main__":
     list = SimpleSparseNeighborList(senders, receivers, jnp.ones(senders.size))
 
     print(prune_neighbor_list(list, jnp.asarray([1, 0, 0, 0, 0, 0], dtype=bool), 10, 1))
-
-

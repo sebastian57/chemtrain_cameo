@@ -171,6 +171,46 @@ def mask_neighbor_list(nbrs: partition.NeighborList,
     return nbrs.set(idx=new_idx, reference_position=new_position)
 
 
+def static_neighbor_list(neighbor_idx: Array,
+                         reference_position: Array,
+                         max_occupancy: int = None) -> partition.NeighborList:
+    """Wraps precomputed edge indices in a `NeighborList` shell.
+
+    Used for datasets that ship a precomputed, fixed connectivity instead of
+    rebuilding it per sample. `error=None` marks the graph as externally
+    supplied, which is the signal downstream models use to skip
+    `neighbor_fn.update` and consume the indices verbatim. The same convention is
+    already used by the LAMMPS export path.
+
+    Args:
+        neighbor_idx: `(2, E)` indices in JAX-MD `Sparse` layout, i.e. row 0
+            receivers and row 1 senders, padded with the sentinel `N` (the atom
+            capacity).
+        reference_position: `(N, 3)` positions the graph was constructed at.
+        max_occupancy: Static edge capacity. Defaults to `E`.
+
+    Returns:
+        A `Sparse` `NeighborList` carrying the supplied indices.
+    """
+    idx = jnp.asarray(neighbor_idx, dtype=jnp.int32)
+    if idx.ndim != 2 or idx.shape[0] != 2:
+        raise ValueError(
+            f"neighbor_idx must have shape (2, E), got {idx.shape}."
+        )
+
+    return partition.NeighborList(
+        idx,
+        jnp.asarray(reference_position),
+        None,  # error: None marks the graph as externally supplied
+        None,  # cell_list_capacity
+        int(idx.shape[1]) if max_occupancy is None else int(max_occupancy),
+        partition.Sparse,
+        None,  # cell_size
+        None,  # cell_list_fn
+        None,  # update_fn
+    )
+
+
 def exclude_from_neighbor_list(neighbor: partition.NeighborList,
                                exclude_idx,
                                exclude_mask) -> partition.NeighborList:
