@@ -1493,8 +1493,7 @@ class DataParallelTrainer(MLETrainerTemplate):
         log_str = (
             f"[Epoch {self._epoch}]:\n"
             f"\tAverage train loss: {mean_train_loss:.5f}\n"
-            f"\tAverage val loss: "
-            f"{'not evaluated (no held-out split)' if val_loss is None else val_loss}\n"
+            f"\tAverage val loss: {val_loss}\n"
             f"\tGradient norm: {self.gradient_norm_history[-1]}\n"
             f"\tElapsed time = {duration:.3f} min\n"
             f"\tPer-target losses:\n"
@@ -1560,11 +1559,7 @@ class DataParallelTrainer(MLETrainerTemplate):
         """
         #  if no validation data given, _early_stop.best_params are simply
         #  init_params
-        if "validation" not in self._batch_states:
-            # No validation was ever evaluated, so _early_stop.best_params is still the
-            # initial params. Fall back to the CURRENT params -- returning init params here
-            # would silently export an untrained model. (The original condition was a
-            # chained comparison, `(... in keys) and (keys is None)`, i.e. always False.)
+        if "validation" in self._batch_states.keys() is None:
             return self.params
         else:
             return self._early_stop.best_params
